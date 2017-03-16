@@ -5,7 +5,7 @@ class ActiveCampaign
     # TODO: Refactor this!
     #       Need best practice to grouping APIs
     def action_calls
-      api_list = {
+      {
         # Account View
         account_view: { method: 'get' },
 

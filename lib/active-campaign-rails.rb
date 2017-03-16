@@ -1,4 +1,6 @@
 require "active-campaign-rails/version"
+require "active-campaign-rails/utils"
+require "active-campaign-rails/errors"
 require "active-campaign-rails/client"
 require 'rest-client'
 
@@ -20,7 +22,7 @@ class ActiveCampaign
     @api_output = 'json' if @api_output == nil
 
   end
-  
+
 
   def method_missing(api_action, *args, &block)
 
@@ -42,7 +44,7 @@ class ActiveCampaign
 
       # Return response from API server
       # Default to JSON
-      return response.body
+      return handle_json_response(response)
 
     when 'post'
 
@@ -59,7 +61,7 @@ class ActiveCampaign
 
       # Return response from API server
       # Default to JSON
-      return response.body
+      return handle_json_response(response)
 
     when 'delete'
 
@@ -73,17 +75,44 @@ class ActiveCampaign
 
       # Return response from API server
       # Default to JSON
-      return response.body
+      return handle_json_response(response)
 
     end
 
   end
 
-  private
-    def generate_api_url api_action
-      host = action_calls[api_action][:endpoint] || @api_endpoint
-      path = action_calls[api_action][:path]     || '/admin/api.php'
+private
 
-      "#{host}#{path}?api_key=#{@api_key}&api_action=#{api_action.to_s}&api_output=#{@api_output}"
+  def generate_api_url api_action
+    host = action_calls[api_action][:endpoint] || @api_endpoint
+    path = action_calls[api_action][:path]     || '/admin/api.php'
+
+    "#{host}#{path}?api_key=#{@api_key}&api_action=#{api_action.to_s}&api_output=#{@api_output}"
+  end
+
+  def handle_json_response(response)
+    body = ActiveCampaignRails::Utils.symbolize_keys(JSON.load(response.body))
+    case response.code
+    when 200, 201, 202, 204
+      if body[:result_code] == 1
+        body
+      else
+        if body[:result_message] == "You are not authorized to access this file"
+          raise ActiveCampaignRails::AuthorizationError, response
+        else
+          raise ActiveCampaignRails::GeneralAPIError, response
+        end
+      end
+    when 401
+      raise ActiveCampaignRails::AuthenticationError, response
+    when 406
+      raise ActiveCampaignRails::UnsupportedFormatRequestedError, response
+    when 422
+      raise ActiveCampaignRails::ResourceValidationError, response
+    when 503
+      raise ActiveCampaignRails::ServiceUnavailableError, response
+    else
+      raise ActiveCampaignRails::GeneralAPIError, response
     end
+  end
 end
